@@ -24,9 +24,10 @@ public class TcpClient {
     private String serverMsg;
     private OnMessageReceived listener = null;
     private boolean running = false;
-    private DataOutputStream printWriter;
+    private PrintWriter printWriter;
     private BufferedReader bufferedReader;
-    private Thread sendThread;
+    private Thread worker;
+    Socket socket;
 
 
     public TcpClient(OnMessageReceived listener){
@@ -35,80 +36,87 @@ public class TcpClient {
     }
 
     public void sendMsg(final String msg){
-//        try {
-//            new Thread(new Runnable() {
-//                @Override
-//                public void run () {
-//                    if (running && printWriter != null /*&& !printWriter.checkError()*/) {
-//                        //printWriter.println(msg);
-//                        //printWriter.flush();
-//                        try {
-//                            printWriter.writeUTF(msg);
-//                        }catch (IOException e){
-//                            e.printStackTrace();
-//                        }
-//                    }
-//                }
-//            }).start();
-//
-//        }catch(Exception e){
-//            e.printStackTrace();
-//        }
-
-        try {
-            printWriter.writeUTF(msg);
-        }catch (IOException e){
-            e.printStackTrace();
+        Log.i(Tag, "Sending msg:" + msg);
+        if (printWriter != null && !printWriter.checkError()) {
+            printWriter.println(msg);
+            printWriter.flush();
         }
     }
 
     public void stopClient(){
         sendMsg(Constants.CLOSED_CONNECTION + "jack");
         running = false;
+
+        if(worker!=null) {
+            try {
+                worker.join();
+            }catch(InterruptedException e){
+                e.printStackTrace();
+            }finally {
+                worker=null;
+            }
+        }
+
         if(printWriter!=null){
-            //printWriter.flush();
-            //printWriter.close();
+            printWriter.flush();
+            printWriter.close();
+            printWriter = null;
+        }
+
+        try{
+            if(socket != null){
+                socket.close();
+            }
+        }catch(IOException e){
+            e.printStackTrace();
+        }finally {
+            socket=null;
         }
 
         listener = null;
         bufferedReader = null;
-        printWriter = null;
     }
 
-    public void run(){
-        running = true;
-
+    public void startClient(){
         try{
             InetAddress serverAddr = InetAddress.getByName(SERVER_IP);
             Log.i(Tag, "connecting...");
 
-            Socket socket = new Socket(serverAddr, SERVER_PORT);
+            socket = new Socket(serverAddr, SERVER_PORT);
             try{
-                //printWriter = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
-                printWriter = new DataOutputStream(socket.getOutputStream());
+                printWriter = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+                //printWriter = new DataOutputStream(socket.getOutputStream());
                 bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
                 sendMsg(Constants.LOGIN_NAME + "jack");
 
-                while(running){
-                    serverMsg = bufferedReader.readLine();
-                    if(serverMsg != null && listener != null){
-                        listener.messageReceived(serverMsg);
+                worker = new Thread(new Runnable() {
+                    @Override
+                    public void run () {
+                        try {
+                            while (running) {
+                                serverMsg = bufferedReader.readLine();
+                                if (serverMsg != null && listener != null) {
+                                    listener.messageReceived(serverMsg);
+                                }
+                            }
+                        }catch(IOException e){
+                            e.printStackTrace();
+                        }
                     }
-                }
+                });
+
+                running = true;
+                worker.start();
+
             }catch (Exception e){
                 Log.e(Tag, e.toString());
-            }finally {
-                socket.close();
             }
 
         }catch(IOException e){
             e.printStackTrace();
         }
-
-        running = false;
     }
-
 
     public interface OnMessageReceived{
         void messageReceived(String msg);

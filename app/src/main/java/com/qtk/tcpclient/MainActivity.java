@@ -3,6 +3,7 @@ package com.qtk.tcpclient;
 import android.os.AsyncTask;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -38,13 +39,10 @@ public class MainActivity extends AppCompatActivity {
             public void onClick (View view) {
                 String msg = editText.getText().toString();
                 arrayList.add("Client: " + msg);
-
-                if(tcpClient !=null){
-                    tcpClient.sendMsg(msg);
-                }
-
                 adapter.notifyDataSetChanged();
                 editText.setText("");
+
+                new SendMsgTask().execute(msg);
             }
         });
     }
@@ -83,41 +81,69 @@ public class MainActivity extends AppCompatActivity {
     public boolean onOptionsItemSelected(MenuItem item){
         switch (item.getItemId()){
             case R.id.connect:
-                new ConnectTask().execute("");
+                new ConnectTask().execute();
                 return true;
             case R.id.disconnect:
-                if(tcpClient != null) {
-                    tcpClient.stopClient();
-                    tcpClient=null;
-                }
-                arrayList.clear();
-                adapter.notifyDataSetChanged();
+                new DisconnectTask().execute();
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
         }
     }
 
-    private class ConnectTask extends AsyncTask<String, String, TcpClient>{
+    private class ConnectTask extends AsyncTask<Void, String, Void>{
         @Override
-        protected TcpClient doInBackground(String... msg){
+        protected Void doInBackground(Void... nothing){
             tcpClient = new TcpClient(new TcpClient.OnMessageReceived() {
                 @Override
                 public void messageReceived (String msg) {
                     publishProgress(msg);
                 }
             });
-
-            tcpClient.run();
+            tcpClient.startClient();
             return null;
         }
 
         @Override
         protected void onProgressUpdate(String... values){
             super.onProgressUpdate(values);
-
             arrayList.add(values[0]);
             adapter.notifyDataSetChanged();
         }
     }
+
+    private class DisconnectTask extends AsyncTask<Void, Void, Void>{
+        @Override
+        protected  Void doInBackground(Void... nothing){
+            Log.i("DisconnectTask", "doInBackground");
+            tcpClient.stopClient();
+            tcpClient=null;
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void nothing){
+            super.onPostExecute(nothing);
+            arrayList.clear();
+            adapter.notifyDataSetChanged();
+        }
+    }
+
+    private class SendMsgTask extends AsyncTask<String, Void, Void>{
+        @Override
+        protected Void doInBackground(String... msg){
+            Log.i("SendMsgTask", "doInBackground");
+            tcpClient.sendMsg(msg[0]);
+            return null;
+        }
+
+//        @Override
+//        protected void onPostExecute(Void nothing){
+//            super.onPostExecute(nothing);
+////            arrayList.clear();
+////            adapter.notifyDataSetChanged();
+//        }
+    }
+
+
 }
